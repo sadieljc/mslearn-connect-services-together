@@ -1,17 +1,14 @@
 ﻿using System;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Azure.ServiceBus;
+using Azure.Messaging.ServiceBus;
 
 namespace performancemessagereceiver
 {
     class Program
     {
-        const string ServiceBusConnectionString = "";
+        const string ServiceBusConnectionString = "Endpoint=sb://salesteamapp-sjc-nov4th.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=OttwzqMcO85mohyGkBI++56o5d97qo9l+UUoMCPVN24=";
         const string TopicName = "salesperformancemessages";
         const string SubscriptionName = "Americas";
-        static ISubscriptionClient subscriptionClient;
 
         static void Main(string[] args)
         {
@@ -21,37 +18,46 @@ namespace performancemessagereceiver
         static async Task MainAsync()
         {
             // Create a Subscription Client here
+            var client = new ServiceBusClient(ServiceBusConnectionString);
 
             Console.WriteLine("======================================================");
             Console.WriteLine("Press ENTER key to exit after receiving all the messages.");
             Console.WriteLine("======================================================");
+            
+            var processorOptions = new ServiceBusProcessorOptions
+            {
+                MaxConcurrentCalls = 1,
+                AutoCompleteMessages = false
+            };
+
+            var processor = client.CreateProcessor(TopicName, SubscriptionName, processorOptions);
 
             // Register subscription message handler and receive messages in a loop
-            RegisterMessageHandler();
+            processor.ProcessMessageAsync += ProcessMessagesAsync;
+            processor.ProcessErrorAsync += ExceptionReceivedHandler;
+
+            await processor.StartProcessingAsync();
 
             Console.Read();
 
             // Close the subscription here
+            await processor.DisposeAsync();
+            await client.DisposeAsync();
         }
 
-        static void RegisterMessageHandler()
+        static async Task ProcessMessagesAsync(ProcessMessageEventArgs args)
         {
-            throw new NotImplementedException();
+            Console.WriteLine($"Received message: SequenceNumber:{args.Message.SequenceNumber} Body:{args.Message.Body}");
+            await args.CompleteMessageAsync(args.Message);
         }
 
-        static async Task ProcessMessagesAsync(Message message, CancellationToken token)
+        static Task ExceptionReceivedHandler(ProcessErrorEventArgs args)
         {
-            throw new NotImplementedException();
-        }
-
-        static Task ExceptionReceivedHandler(ExceptionReceivedEventArgs exceptionReceivedEventArgs)
-        {
-            Console.WriteLine($"Message handler encountered an exception {exceptionReceivedEventArgs.Exception}.");
-            var context = exceptionReceivedEventArgs.ExceptionReceivedContext;
+            Console.WriteLine($"Message handler encountered an exception {args.Exception}.");
             Console.WriteLine("Exception context for troubleshooting:");
-            Console.WriteLine($"- Endpoint: {context.Endpoint}");
-            Console.WriteLine($"- Entity Path: {context.EntityPath}");
-            Console.WriteLine($"- Executing Action: {context.Action}");
+            Console.WriteLine($"- Endpoint: {args.FullyQualifiedNamespace}");
+            Console.WriteLine($"- Entity Path: {args.EntityPath}");
+            Console.WriteLine($"- Executing Action: {args.ErrorSource}");
             return Task.CompletedTask;
         }  
     }
